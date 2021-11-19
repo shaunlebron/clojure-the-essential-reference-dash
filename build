@@ -1,0 +1,4 @@
+clj -M -m cljs.main \
+  -t node \
+  -o docset.js \
+  -c docset.core
