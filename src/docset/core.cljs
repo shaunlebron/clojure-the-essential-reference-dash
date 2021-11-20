@@ -43,26 +43,42 @@
 (defn remove-split-hrefs [s]
   (string/replace s #"_split_00\d" ""))
 
+(defn correct-toc-entry [a b]
+  (if (and (not (:anchor a)) ;; anchor missing
+           (not= (:filename-orig a)
+                 (:filename-orig b)) ;; 
+           )))
+
 (defn make-toc-entry [e]
-  (let [path (-> e :content :src)
-        [filename anchor] (string/split path #"#")
+  (let [path-orig (-> e :content :src)
+        [filename-orig anchor] (string/split path-orig #"#")
+        path     (remove-split-hrefs path-orig)
+        filename (remove-split-hrefs filename-orig)
         name- (-> e :navLabel :text)]
-    {:path (remove-split-hrefs path)
+    {:path path
      :name name-
      :type "Section"
-     :filename-orig filename
-     :filename (remove-split-hrefs filename)
-     :anchor anchor
-     }))
+     :filename-orig filename-orig
+     :filename filename
+     :anchor anchor}))
 
 (defn parse-toc-entries []
   (let [nav (-> (slurp (str epub-dir "/toc.ncx"))
-                (parse-xml)
+                parse-xml
                 (js->clj :keywordize-keys true)
-                :ncx :navMap)]
-    (->> (tree-seq #(vector? (:navPoint %)) :navPoint nav)
-         (drop 1) ;; skip empty root
-         (map make-toc-entry))))
+                :ncx :navMap)
+        entries (->> (tree-seq #(vector? (:navPoint %)) :navPoint nav)
+                     next
+                     vec)] ;; skip empty root
+    (loop [prev nil
+           [e & more] entries
+           result []]
+      (let [e (-> (make-toc-entry e)
+                  (correct-toc-entry prev))
+            result (conj result e)]
+        (if more
+          (recur e more result)
+          result)))))
 
 ;; See https://kapeli.com/docsets#tableofcontents
 (defn docset-toc-tag [entry]
