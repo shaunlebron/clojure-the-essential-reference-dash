@@ -104,7 +104,7 @@
     (spit fname (str (slurp fname) styles))))
 
 (defn get-body [s]
-  (second (re-find #"(?m)<body(.*)</body>" s)))
+  (second (re-find #"<body[^>]*>([\s\S]*)</body>" s)))
 
 (defn unsplit-files! [toc]
   (let [toc (for [v toc]
