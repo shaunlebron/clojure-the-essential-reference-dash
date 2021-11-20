@@ -11,6 +11,13 @@
 (def existsSync (js/require "exists-sync"))
 (def glob-lib (js/require "glob"))
 (def path-lib (js/require "path"))
+(def process (js/require "process"))
+
+(defn cd [s]
+ (.chdir process s))
+
+(defn cwd []
+  (.cwd process))
 
 (def request-opts
   #js{:headers
