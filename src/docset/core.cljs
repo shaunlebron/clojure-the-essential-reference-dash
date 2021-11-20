@@ -48,6 +48,7 @@
      :name name-
      :type "Section"
      :filename filename
+     :filename-unsplit (string/replace filename #"_split_00\d" "")
      :anchor anchor
      }))
 
@@ -102,6 +103,27 @@
   (let [fname (str epub-dir "/stylesheet.css")]
     (spit fname (str (slurp fname) styles))))
 
+(defn get-body [s]
+  (second (re-find #"(?m)<body(.*)</body>" s)))
+
+(defn unsplit-files! [toc]
+  (let [toc (for [v toc]
+              (-> v
+                  (update :filename-unsplit #(str epub-dir "/" %))
+                  (update :filename #(str epub-dir "/" %))))]
+    (doseq [[fname entries] (group-by :filename-unsplit toc)
+            :let [fnames (sort (distinct (map :filename entries)))]
+            :when (next fnames)]
+      (let [other-bodies (->> (next fnames)
+                              (map (comp get-body slurp))
+                              (string/join "\n"))]
+        (println (str "Writing " fname "..."))
+        (spit fname
+              (string/replace
+                (slurp (first fnames))
+                "</body>" 
+                (str other-bodies "</body>")))))))
+
 (defn -main []
   (println "Creating ClojureScript docset...")
 
@@ -123,7 +145,11 @@
   (copy "docset/Info.plist" (str docset-path "/Contents/Info.plist"))
   (copy epub-dir docset-docs-path) ;; epub/* files are moved to the docs/*
 
+  (println "Parsing ebook toc...")
   (let [entries (parse-toc-entries)]
+    (println "Unsplitting files...")
+    (unsplit-files! entries)
+
     (println "Creating index database...")
     (build-db! entries)
 
