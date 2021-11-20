@@ -40,15 +40,18 @@
         (.run insert (:name e) (:type e) (:path e))))
     (.close db)))
 
+(defn remove-split-hrefs [s]
+  (string/replace s #"_split_00\d" ""))
+
 (defn make-toc-entry [e]
   (let [path (-> e :content :src)
         [filename anchor] (string/split path #"#")
         name- (-> e :navLabel :text)]
-    {:path path
+    {:path (remove-split-hrefs path)
      :name name-
      :type "Section"
-     :filename filename
-     :filename-unsplit (string/replace filename #"_split_00\d" "")
+     :filename-orig filename
+     :filename (remove-split-hrefs filename)
      :anchor anchor
      }))
 
@@ -78,11 +81,12 @@
           b (str (docset-toc-tag entry) a)]
       (string/replace text a b))))
 
-(defn inject-docset-toc-anchors! [toc]
+(defn post-process-toc-files! [toc]
   (doseq [[filename entries] (group-by :filename toc)]
     (let [fname (str docset-docs-path "/" filename)
           text (slurp fname)
-          new-text (reduce add-docset-toc-anchor text entries)]
+          new-text (remove-split-hrefs
+                     (reduce add-docset-toc-anchor text entries))]
       (spit fname new-text))))
 
 ;; Using the https://livebook.manning.com styling for code.
@@ -109,15 +113,15 @@
 (defn unsplit-files! [toc]
   (let [toc (for [v toc]
               (-> v
-                  (update :filename-unsplit #(str epub-dir "/" %))
-                  (update :filename #(str epub-dir "/" %))))]
-    (doseq [[fname entries] (group-by :filename-unsplit toc)
-            :let [fnames (sort (distinct (map :filename entries)))]
+                  (update :filename #(str epub-dir "/" %))
+                  (update :filename-orig #(str epub-dir "/" %))))]
+    (doseq [[fname entries] (group-by :filename toc)
+            :let [fnames (sort (distinct (map :filename-orig entries)))]
             :when (next fnames)]
       (let [other-bodies (->> (next fnames)
                               (map (comp get-body slurp))
                               (string/join "\n"))]
-        (println (str "Writing " fname "..."))
+        (println (str "Unsplitting " fname "..."))
         (spit fname
               (string/replace
                 (slurp (first fnames))
@@ -137,24 +141,25 @@
     #js[epub-file "-d" epub-dir]
     #js{:stdio "inherit"})
 
-  (println "Adding styles...")
-  (add-styles!)
-
-  (println "Copying over docset pages...")
-  (copy "docset/icon.png" (str docset-path "/icon.png"))
-  (copy "docset/Info.plist" (str docset-path "/Contents/Info.plist"))
-  (copy epub-dir docset-docs-path) ;; epub/* files are moved to the docs/*
-
   (println "Parsing ebook toc...")
   (let [entries (parse-toc-entries)]
+
     (println "Unsplitting files...")
     (unsplit-files! entries)
+
+    (println "Adding styles...")
+    (add-styles!)
+
+    (println "Copying over docset pages...")
+    (copy "docset/icon.png" (str docset-path "/icon.png"))
+    (copy "docset/Info.plist" (str docset-path "/Contents/Info.plist"))
+    (copy epub-dir docset-docs-path) ;; epub/* files are moved to the docs/*
 
     (println "Creating index database...")
     (build-db! entries)
 
-    (println "Writing toc anchors...")
-    (inject-docset-toc-anchors! entries))
+    (println "Post-process files...")
+    (post-process-toc-files! entries))
 
   ;; create the tar file
   (println "Creating final docset tar file...")
