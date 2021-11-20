@@ -84,14 +84,23 @@
           new-text (reduce add-docset-toc-anchor text entries)]
       (spit fname new-text))))
 
+;; Using the https://livebook.manning.com styling for code.
+(def styles "
+.calibre { font-size: 14pt }
+.programlisting, .code {
+  font-family: Consolas,\"Liberation Mono\",Courier,monospace;
+  color: #333;
+  background-color: #f8f8f8;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #dfdfdf;
+  padding: 1em;
+}
+.code { padding: .125rem .3125rem .0625rem; }")
+
 (defn add-styles! []
-  (let [fname (str epub-dir "/stylesheet.css" )
-        styles [".calibre { font-size: 14pt }" ;; default font size too small
-                ".programlisting, .code { background-color: #ececf5 }" ;; soften the code background
-                ".code { padding: 0.1em; }"]]
-    (spit fname
-      (str (slurp fname)
-           (string/join "\n" styles)))))
+  (let [fname (str epub-dir "/stylesheet.css")]
+    (spit fname (str (slurp fname) styles))))
 
 (defn -main []
   (println "Creating ClojureScript docset...")
