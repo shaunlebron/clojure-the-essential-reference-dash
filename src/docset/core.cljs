@@ -84,6 +84,15 @@
           new-text (reduce add-docset-toc-anchor text entries)]
       (spit fname new-text))))
 
+(defn add-styles! []
+  (let [fname (str epub-dir "/stylesheet.css" )
+        styles [".calibre { font-size: 14pt }" ;; default font size too small
+                ".programlisting, .code { background-color: #ececf5 }" ;; soften the code background
+                ".code { padding: 0.1em; }"]]
+    (spit fname
+      (str (slurp fname)
+           (string/join "\n" styles)))))
+
 (defn -main []
   (println "Creating ClojureScript docset...")
 
@@ -96,6 +105,9 @@
   (spawn-sync "unzip"
     #js[epub-file "-d" epub-dir]
     #js{:stdio "inherit"})
+
+  (println "Adding styles...")
+  (add-styles!)
 
   (println "Copying over docset pages...")
   (copy "docset/icon.png" (str docset-path "/icon.png"))
