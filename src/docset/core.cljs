@@ -34,66 +34,74 @@
 ;; Parse epub toc
 ;;------------------------------------------------------------------------------
 
-(defn remove-split [s] (string/replace s #"_split_00\d" ""))
-(defn inc-num-in-str [s] (string/replace s #"\d+" #(inc (js/parseInt % 10))))
-
-(defn parse-split-num [s]
-  (when s
-    (some-> (re-find #"_split_\d\d\d" s)
-            (second)
-            (js/Number.parseInt 10))))
-
-(defn at-split [a b]
-  (when-let [ai (parse-split-num a)]
-    (when-let [bi (parse-split-num b)]
-      (= (inc ai) bi))))
-
-(defn add-missing-hash-after-split [a b]
-  (if (and (nil? (:hash a))
-           (at-split (:path a) (:path b)))
-    (assoc a :hash (inc-num-in-str (:hash b)))
-    a))
-
 (defn make-toc-entry [e]
-  (let [[path-old hash] (string/split (-> e :content :src) #"#")
-        path (remove-split path-old)]
+  (let [[path hash] (string/split (-> e :content :src) #"#")]
     {:name (-> e :navLabel :text)
      :type "Section"
      :path path
-     :hash hash
-     :path-old path-old}))
+     :hash hash}))
 
 (defn parse-toc []
   (let [nav (-> (slurp (str epub-dir "/toc.ncx"))
                 parse-xml
                 (js->clj :keywordize-keys true)
-                :ncx :navMap)
-        entries (->> (tree-seq #(vector? (:navPoint %)) :navPoint nav)
-                     next
-                     vec)] ;; skip empty root
+                :ncx :navMap)]
+    (->> (tree-seq #(vector? (:navPoint %)) :navPoint nav)
+         next ;; skip empty root
+         (map make-toc-entry))))
+
+;;------------------------------------------------------------------------------
+;; Fix split entries in toc
+;;------------------------------------------------------------------------------
+
+(defn parse-int [s] (js/Number.parseInt s 10))
+(defn remove-split [s] (string/replace s #"_split_00\d" ""))
+(defn inc-num-in-str [s] (string/replace s #"\d+" #(inc (parse-int %))))
+
+(defn parse-split-num [s]
+  (some->> s
+           (re-find #"_split_(\d\d\d)")
+           (second)
+           (parse-int)))
+
+(defn at-split? [a b]
+  (when-let [ai (parse-split-num a)]
+    (when-let [bi (parse-split-num b)]
+      (= ai (inc bi)))))
+
+(defn add-missing-hash-after-split [a b]
+  (if (and (nil? (:hash a))
+           (at-split? (:split-path a) (:split-path b)))
+    (assoc a :hash (inc-num-in-str (:hash b)))
+    a))
+
+(defn fix-toc-splits [toc]
+  (let [toc (for [e toc]
+              (-> e
+                  (assoc :split-path (:path e))
+                  (update :path remove-split)))]
     (loop [prev nil
-           [e & more] entries
+           [e & more] toc
            result []]
-      (let [e (-> (make-toc-entry e)
-                  (add-missing-hash-after-split prev))
+      (let [e (add-missing-hash-after-split e prev)
             result (conj result e)]
         (if more
           (recur e more result)
           result)))))
 
 ;;------------------------------------------------------------------------------
-;; Removing all split refs
+;; Remove all split refs from pages
 ;;------------------------------------------------------------------------------
 
 (defn remove-split-refs! [toc]
   (cd epub-dir)
-  (doseq [path (sort (distinct (map :path-old toc)))]
+  (doseq [path (sort (distinct (map :split-path toc)))]
     (println "Removing split refs from" path)
     (spit path (remove-split (slurp path))))
   (cd root-dir))
 
 ;;------------------------------------------------------------------------------
-;; Merging splits
+;; Merge all files that were split
 ;;------------------------------------------------------------------------------
 
 (defn get-body [s]
@@ -105,7 +113,7 @@
 (defn merge-splits! [toc]
   (cd epub-dir)
   (doseq [[path entries] (sort-by first (group-by :path toc))
-          :let [split-paths (sort (distinct (map :path-old entries)))]
+          :let [split-paths (sort (distinct (map :split-path entries)))]
           :when (next split-paths)]
     (println (str "Merging splits into " path "..."))
     (spit path (->> (next split-paths)
@@ -198,11 +206,10 @@
     #js[epub-file "-d" epub-dir]
     #js{:stdio "inherit"})
 
-  (println "Parsing ebook toc...")
-  (let [toc (parse-toc)]
-
-    (doseq [e toc]
-      (prn e))
+  (let [_ (println "Parsing ebook TOC...")
+        toc (parse-toc)
+        _ (println "Fixing TOC splits...")
+        toc (fix-toc-splits toc)]
 
     (println "Removing references to split files...")
     (remove-split-refs! toc)
