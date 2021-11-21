@@ -15,7 +15,7 @@
 	<true/>
 
   <key>dashIndexFilePath</key>
-  <string>api/index.html</string>
+  <string>OEBPS/Text/navDisplay.html</string>
 
   <key>DashDocSetFamily</key>
   <string>dashtoc</string>
