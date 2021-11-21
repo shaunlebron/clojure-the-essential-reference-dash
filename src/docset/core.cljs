@@ -51,7 +51,10 @@
          (map make-toc-entry))))
 
 ;;------------------------------------------------------------------------------
-;; Fix split entries in toc
+;; We don’t want chapters split up into different files,
+;; So there is a multi-step process to merge them:
+;;
+;; 1. Fix split chapter refs in toc
 ;;------------------------------------------------------------------------------
 
 (defn parse-int [s] (js/Number.parseInt s 10))
@@ -90,10 +93,11 @@
           result)))))
 
 ;;------------------------------------------------------------------------------
-;; Remove all split refs from pages
+;; ...
+;; 2. Remove all split hrefs from pages
 ;;------------------------------------------------------------------------------
 
-(defn remove-split-refs! [toc]
+(defn remove-split-hrefs! [toc]
   (cd epub-dir)
   (doseq [path (sort (distinct (map :split-path toc)))]
     (println "Removing split refs from" path)
@@ -101,7 +105,8 @@
   (cd root-dir))
 
 ;;------------------------------------------------------------------------------
-;; Merge all files that were split
+;; ...
+;; 3. Merge splits into a single file per chapter.
 ;;------------------------------------------------------------------------------
 
 (defn get-body [s]
@@ -141,7 +146,7 @@
     (.close db)))
 
 ;;------------------------------------------------------------------------------
-;; Add TOC markers inside each page for Dash
+;; Add TOC preview for each chapter file:
 ;; https://kapeli.com/docsets#tableofcontents
 ;;------------------------------------------------------------------------------
 
@@ -208,13 +213,13 @@
 
   (let [_ (println "Parsing ebook TOC...")
         toc (parse-toc)
-        _ (println "Fixing TOC splits...")
+        _ (println "Fixing TOC chapter splits...")
         toc (fix-toc-splits toc)]
 
-    (println "Removing references to split files...")
-    (remove-split-refs! toc)
+    (println "Fixing hyperlinks to chapter splits...")
+    (remove-split-hrefs! toc)
 
-    (println "Merging split files...")
+    (println "Merging chapter splits...")
     (merge-splits! toc)
 
     (println "Adding TOC markers to files...")
