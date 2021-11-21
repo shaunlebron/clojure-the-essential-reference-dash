@@ -19,20 +19,19 @@ To quickly navigate to any API symbol in this book, this repo makes its EPUB fil
 
 ## Create the Docset
 
-1. Download the book’s epub file to `book.epub`.
-2. Run the following to generate the docset:
+1. Buy the book, and download the epub file to `book.epub`.
+1. Use [Clojure CLI](https://clojure.org/guides/getting_started) to build the node.js file:
+
+    ```
+    ./build
+    ```
+
+1. Run the following to generate the docset:
 
     ```
     npm ci
     node docset.js
     ```
 
-3. Import `docset/ClojureEssentialReference.docset` into Dash under Preferences > Docsets.
+1. Import `docset/ClojureEssentialReference.docset` into Dash under Preferences > Docsets.
 
-## Development
-
-Using [Clojure CLI](https://clojure.org/guides/getting_started) to build the node.js file:
-
-```
-./build
-```
