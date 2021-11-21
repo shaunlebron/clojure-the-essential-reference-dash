@@ -8,9 +8,6 @@ To quickly navigate to any API symbol in this book, this repo makes its EPUB fil
 
 ![screenshot](screenshot.png)
 
-[dash]:https://kapeli.com/dash
-[book]:https://www.manning.com/books/clojure-the-essential-reference
-
 ## Docset features
 
 * Every heading is indexed as a Docset section.
@@ -19,8 +16,8 @@ To quickly navigate to any API symbol in this book, this repo makes its EPUB fil
 
 ## Create the Docset
 
-1. Buy the book, and download the epub file to `book.epub`.
-1. Use [Clojure CLI](https://clojure.org/guides/getting_started) to build the node.js file:
+1. Buy the [book], and download the epub file to `book.epub`.
+1. Use [Clojure CLI][clojure] to build the node.js file:
 
     ```
     ./build
@@ -34,4 +31,9 @@ To quickly navigate to any API symbol in this book, this repo makes its EPUB fil
     ```
 
 1. Import `docset/ClojureEssentialReference.docset` into Dash under Preferences > Docsets.
+
+
+[clojure]:https://clojure.org/guides/getting_started
+[dash]:https://kapeli.com/dash
+[book]:https://www.manning.com/books/clojure-the-essential-reference
 
