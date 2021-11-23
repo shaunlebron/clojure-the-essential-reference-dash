@@ -38,7 +38,7 @@ it to a Dash docset.
 ## Create the Docset
 
 1. Buy the [book], and download the epub file to `book.epub`.
-1. Use [Clojure CLI][clojure] to build the node.js file:
+1. Use [Clojure CLI] to build the node.js file:
 
     ```
     ./build
@@ -63,7 +63,7 @@ It provides an [index of symbols referenced in the book][symbols] along with
 all the URLs to the [online version][livebook] if you wish to browse/index
 those instead of the EPUB file.
 
-[clojure]:https://clojure.org/guides/getting_started
+[clojure cli]:https://clojure.org/guides/getting_started
 [dash]:https://kapeli.com/dash
 [book]:https://www.manning.com/books/clojure-the-essential-reference
 [symbols]:https://github.com/p3r7/clojure-essential-ref/blob/13ac560c25f7355fba00d9ca8c9f4ca03e7fd189/clojure-essential-ref.el#L50
