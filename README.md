@@ -6,8 +6,8 @@ reference for Clojure’s standard library, to date.
 This repo allows you to quickly jump to any documentation entry in the book
 using the popular API browser [Dash][dash].
 
-For now, you must purchase the book’s EPUB file, then use our script to convert
-it to a Dash docset.
+For now, you must purchase the book’s `.epub` file, then use our script to convert
+it to a Dash `.docset` file.
 
 ![screenshot](screenshot.png)
 
