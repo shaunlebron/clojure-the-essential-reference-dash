@@ -19,6 +19,7 @@ pom.xml.asc
 
 out
 epub
+book.epub
 
 /docset/*.docset
 /docset/*.tgz
