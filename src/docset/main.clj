@@ -1,17 +1,13 @@
-(ns docset.core
+(ns docset.main
   (:require
     [clojure.pprint :refer [pprint]]
     [clojure.string :as string]
-    [docset.io :refer [delete mkdirs copy slurp spit cd cwd]]))
-
-(def xml2json (js/require "xml2json"))
-(def parse-xml #(.toJson xml2json % #js {:object true}))
-
-(def Database (js/require "better-sqlite3"))
-(def child-process (js/require "child_process"))
-(def spawn-sync (.-spawnSync child-process))
-(def exec-sync (.-execSync child-process))
-
+    [clojure.java.shell :refer [sh]]
+    [clojure.java.jdbc :as jdbc]
+    [clojure.xml :as xml]
+    [me.raynes.fs :as fs])
+  (:import
+    [java.net URLEncoder]))
 
 ;; code derived from Lokeshwaran's (@dlokesh) project:
 ;; https://github.com/dlokesh/clojuredocs-docset
@@ -21,7 +17,7 @@
 (def docset-name "ClojureEssentialReference.docset")
 (def tar-name "ClojureEssentialReference.tgz")
 
-(def root-dir (cwd))
+(def root-dir fs/*cwd*)
 (def work-dir "docset")
 
 (def docset-path (str work-dir "/" docset-name))
@@ -30,25 +26,48 @@
 (def epub-dir (str docset-path "/Contents/Resources/Documents"))
 (def db-path (str docset-path "/Contents/Resources/docSet.dsidx"))
 
+(def sqlite-db {:classname "org.sqlite.JDBC"
+                :subprotocol "sqlite"
+                :subname db-path})
+
+(defn cwd [path]
+  (str fs/*cwd* "/" path))
+
 ;;------------------------------------------------------------------------------
 ;; Parse epub toc
 ;;------------------------------------------------------------------------------
 
+(defn xml-child [content tag]
+  (->> content
+       (filter #(= tag (:tag %)))
+       (first)))
+
 (defn make-toc-entry [e]
-  (let [[path hash] (string/split (-> e :content :src) #"#")]
-    {:name (-> e :navLabel :text)
+  (let [src (-> e
+                :content
+                (xml-child :content)
+                :attrs
+                :src)
+        [path hash] (string/split src #"#")]
+    {:name (-> e
+               :content
+               (xml-child :navLabel)
+               :content
+               (xml-child :text)
+               :content
+               first)
      :type "Section"
      :path path
      :hash hash}))
 
 (defn parse-toc []
-  (let [nav (-> (slurp (str epub-dir "/toc.ncx"))
-                parse-xml
-                (js->clj :keywordize-keys true)
-                :ncx :navMap)]
-    (->> (tree-seq #(vector? (:navPoint %)) :navPoint nav)
-         next ;; skip empty root
-         (map make-toc-entry))))
+  (let [toc (xml/parse (str epub-dir "/toc.ncx"))
+        nav (-> toc
+                :content
+                (xml-child :navMap))
+        entries (->> (tree-seq :content :content nav)
+                     (filter #(= :navPoint (:tag %))))]
+    (map make-toc-entry entries)))
 
 ;;------------------------------------------------------------------------------
 ;; We don’t want chapters split up into different files,
@@ -57,9 +76,9 @@
 ;; 1. Fix split chapter refs in toc
 ;;------------------------------------------------------------------------------
 
-(defn parse-int [s] (js/Number.parseInt s 10))
+(defn parse-int [s] (Integer/parseInt s))
 (defn remove-split [s] (string/replace s #"_split_00\d" ""))
-(defn inc-num-in-str [s] (string/replace s #"\d+" #(inc (parse-int %))))
+(defn inc-num-in-str [s] (string/replace s #"\d+" #(str (inc (parse-int %)))))
 
 (defn parse-split-num [s]
   (some->> s
@@ -98,11 +117,10 @@
 ;;------------------------------------------------------------------------------
 
 (defn remove-split-hrefs! [toc]
-  (cd epub-dir)
-  (doseq [path (sort (distinct (map :split-path toc)))]
-    (println "Removing split refs from" path)
-    (spit path (remove-split (slurp path))))
-  (cd root-dir))
+  (fs/with-cwd epub-dir
+    (doseq [path (sort (distinct (map :split-path toc)))]
+      (println "Removing split refs from" path)
+      (spit (cwd path) (remove-split (slurp (cwd path)))))))
 
 ;;------------------------------------------------------------------------------
 ;; ...
@@ -116,16 +134,15 @@
   (string/replace html "</body>" (str s "</body>")))
 
 (defn merge-splits! [toc]
-  (cd epub-dir)
-  (doseq [[path entries] (sort-by first (group-by :path toc))
-          :let [split-paths (sort (distinct (map :split-path entries)))]
-          :when (next split-paths)]
-    (println (str "Merging splits into " path "..."))
-    (spit path (->> (next split-paths)
-                    (map (comp get-body slurp))
-                    (string/join "\n")
-                    (append-body (slurp (first split-paths))))))
-  (cd root-dir))
+  (fs/with-cwd epub-dir
+    (doseq [[path entries] (sort-by first (group-by :path toc))
+            :let [split-paths (sort (distinct (map :split-path entries)))]
+            :when (next split-paths)]
+      (println (str "Merging splits into " path "..."))
+      (spit (cwd path) (->> (next split-paths)
+                            (map (comp get-body slurp cwd))
+                            (string/join "\n")
+                            (append-body (slurp (cwd (first split-paths)))))))))
 
 ;;------------------------------------------------------------------------------
 ;; Write TOC to Dash index
@@ -135,15 +152,20 @@
   (cond-> path
     hash (str "#" hash)))
 
+(defn search-index-attributes [e]
+  {:name (:name e)
+   :type (:type e)
+   :path (path-hash e)})
+
 (defn build-db! [toc]
-  (let [db (new Database db-path)]
-    (.run (.prepare db "DROP TABLE IF EXISTS searchIndex"))
-    (.run (.prepare db "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT)"))
-    (.run (.prepare db "CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path)"))
-    (let [insert (.prepare db "INSERT INTO searchIndex(name, type, path) VALUES (?, ?, ?)")]
-      (doseq [e toc]
-        (.run insert (:name e) (:type e) (path-hash e))))
-    (.close db)))
+  (jdbc/with-connection sqlite-db
+    (jdbc/do-commands
+      "DROP TABLE IF EXISTS searchIndex"
+      "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT)"
+      "CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path)"))
+  (let [rows (map search-index-attributes toc)]
+    (jdbc/with-connection sqlite-db
+      (apply jdbc/insert-records :searchIndex rows))))
 
 ;;------------------------------------------------------------------------------
 ;; Add TOC preview for each chapter file:
@@ -151,7 +173,7 @@
 ;;------------------------------------------------------------------------------
 
 (defn toc-marker [entry]
-  (let [name- (str "//apple_ref/cpp/" (:type entry) "/" (js/encodeURIComponent (:name entry)))]
+  (let [name- (str "//apple_ref/cpp/" (:type entry) "/" (URLEncoder/encode (:name entry) "UTF-8"))]
     (str "<a name=\"" name- "\" class=\"dashAnchor\"></a>")))
 
 (defn add-toc-marker [text entry]
@@ -164,12 +186,11 @@
       (string/replace text a b))))
 
 (defn add-toc-markers! [toc]
-  (cd epub-dir)
-  (doseq [[path entries] (group-by :path toc)]
-    (let [text (slurp path)
-          new-text (reduce add-toc-marker text entries)]
-      (spit path new-text)))
-  (cd root-dir))
+  (fs/with-cwd epub-dir
+    (doseq [[path entries] (group-by :path toc)]
+      (let [text (slurp (cwd path))
+            new-text (reduce add-toc-marker text entries)]
+        (spit (cwd path) new-text)))))
 
 ;;------------------------------------------------------------------------------
 ;; Fix some styles
@@ -203,13 +224,11 @@
   (println "Creating ClojureScript docset...")
 
   (println "Clearing previous docset folder...")
-  (delete docset-path)
-  (mkdirs epub-dir)
+  (fs/delete-dir docset-path)
+  (fs/mkdirs epub-dir)
 
   (println "Extracting book...")
-  (spawn-sync "unzip"
-    #js[epub-file "-d" epub-dir]
-    #js{:stdio "inherit"})
+  (sh "unzip" epub-file "-d" epub-dir)
 
   (let [_ (println "Parsing ebook TOC...")
         toc (parse-toc)
@@ -229,22 +248,18 @@
     (add-styles!)
 
     (println "Copying over docset config...")
-    (copy "docset/icon.png" (str docset-path "/icon.png"))
-    (copy "docset/Info.plist" (str docset-path "/Contents/Info.plist"))
+    (fs/copy "docset/icon.png" (str docset-path "/icon.png"))
+    (fs/copy "docset/Info.plist" (str docset-path "/Contents/Info.plist"))
 
     (println "Creating index database...")
     (build-db! toc))
 
   ;; create the tar file
   (println "Creating final docset tar file...")
-  (spawn-sync "tar"
-    #js["--exclude='.DS_Store'" "-czf" tar-name docset-name]
-    #js{:cwd work-dir :stdio "inherit"})
+  (sh "tar" "--exclude='.DS_Store'" "-czf" tar-name docset-name :dir work-dir)
 
   (println)
   (println "Created:" docset-path)
-  (println "Created:" tar-path))
-
-(set! *main-cli-fn* -main)
-(enable-console-print!)
+  (println "Created:" tar-path)
+  (System/exit 0))
 

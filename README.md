@@ -38,17 +38,10 @@ it to a Dash `.docset` file.
 ## Create the Docset
 
 1. Buy the [book], and download the epub file to `book.epub`.
-1. Use [Clojure CLI] to build the node.js file:
+1. Run with [Clojure CLI]:
 
     ```
-    ./build
-    ```
-
-1. Run the following to generate the docset:
-
-    ```
-    npm ci
-    node docset.js
+    clj -Mrun
     ```
 
 1. Import `docset/ClojureEssentialReference.docset` into Dash under Preferences > Docsets.
