@@ -162,10 +162,8 @@
     (jdbc/do-commands
       "DROP TABLE IF EXISTS searchIndex"
       "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT)"
-      "CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path)"))
-  (let [rows (map search-index-attributes toc)]
-    (jdbc/with-connection sqlite-db
-      (apply jdbc/insert-records :searchIndex rows))))
+      "CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path)")
+    (apply jdbc/insert-records :searchIndex (map search-index-attributes toc))))
 
 ;;------------------------------------------------------------------------------
 ;; Add TOC preview for each chapter file:
