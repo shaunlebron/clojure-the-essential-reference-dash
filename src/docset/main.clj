@@ -172,8 +172,13 @@
 ;; https://kapeli.com/docsets#tableofcontents
 ;;------------------------------------------------------------------------------
 
+(defn percent-encode [s]
+  (-> s
+      (URLEncoder/encode "UTF-8")
+      (string/replace "+" "%20")))
+
 (defn toc-marker [entry]
-  (let [name- (str "//apple_ref/cpp/" (:type entry) "/" (URLEncoder/encode (:name entry) "UTF-8"))]
+  (let [name- (str "//apple_ref/cpp/" (:type entry) "/" (percent-encode (:name entry)))]
     (str "<a name=\"" name- "\" class=\"dashAnchor\"></a>")))
 
 (defn add-toc-marker [text entry]
